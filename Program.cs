@@ -1,39 +1,39 @@
-﻿using SkiaSharp;
+using SkiaSharp.Views.Desktop;
+using SkiaUiLibrary.Widgets;
 
-const int width = 400;
-const int height = 400;
+Application.EnableVisualStyles();
+Application.SetCompatibleTextRenderingDefault(false);
 
-using var bitmap = new SKBitmap(width, height);
-using var canvas = new SKCanvas(bitmap);
-
-canvas.Clear(SKColors.White);
-
-var center = new SKPoint(width / 2f, height / 2f);
-
-using var outerPaint = new SKPaint
+ class Transaction
 {
-    Style = SKPaintStyle.Stroke,
-    Color = SKColors.DodgerBlue,
-    StrokeWidth = 8,
-    IsAntialias = true
+    public string TransactionId { get; set; }
+    public string Client { get; set; }
+    public string Status { get; set; }
+    public string Amount { get; set; }
+}
+
+const string json = """
+    [
+      { "transaction_id": "#TRX-9821", "client": "Nebula Corp", "status": "Completed",  "amount": "$12,450.00" },
+      { "transaction_id": "#TRX-9822", "client": "Stark Ind",   "status": "Processing", "amount": "$4,200.50"  },
+      { "transaction_id": "#TRX-9823", "client": "Wayne Ent",   "status": "Failed",     "amount": "$850.00"    },
+      { "transaction_id": "#TRX-9824", "client": "Cyberdyne",   "status": "Completed",  "amount": "$22,100.00" }
+    ]
+    """;
+
+var table = new Table("Recent Transactions", json);
+
+var form = new Form
+{
+    Text = "Recent Transactions",
+    ClientSize = new System.Drawing.Size(1100, table.PreferredHeight),
+    FormBorderStyle = FormBorderStyle.FixedSingle,
+    MaximizeBox = false,
+    StartPosition = FormStartPosition.CenterScreen
 };
 
-using var innerPaint = new SKPaint
-{
-    Style = SKPaintStyle.Stroke,
-    Color = SKColors.OrangeRed,
-    StrokeWidth = 6,
-    IsAntialias = true
-};
+var skControl = new SKControl { Dock = DockStyle.Fill };
+skControl.PaintSurface += (_, e) => table.Draw(e.Surface.Canvas, e.Info.Width, e.Info.Height);
 
-canvas.DrawCircle(center, 120, outerPaint);
-canvas.DrawCircle(center, 55, innerPaint);
-
-using var image = SKImage.FromBitmap(bitmap);
-using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-
-var outputPath = Path.Combine(AppContext.BaseDirectory, "circles.png");
-using var stream = File.OpenWrite(outputPath);
-data.SaveTo(stream);
-
-Console.WriteLine($"Saved drawing to: {outputPath}");
+form.Controls.Add(skControl);
+Application.Run(form);
