@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using SkiaSharp;
 
@@ -38,27 +39,70 @@ public class Table
     /// <summary>Preferred client height to fit all rows without clipping.</summary>
     public int PreferredHeight => (int)(RowsTop + _rows.Length * RowH + 36);
 
-    public Table(string title, string json)
+    // Shared constructor — all public entry points funnel here.
+    private Table(string title, string[] columnKeys, string[] columnHeaders, string[][] rows)
     {
-        _title = title;
+        _title         = title;
+        _columnKeys    = columnKeys;
+        _columnHeaders = columnHeaders;
+        _rows          = rows;
+    }
 
+    /// <summary>Build a table from a JSON array string.</summary>
+    public Table(string title, string json)
+        : this(title, ParseJson(json)) { }
+
+    /// <summary>Build a table from any IEnumerable of a C# class/record using reflection.</summary>
+    public static Table From<T>(string title, IEnumerable<T> items) where T : notnull
+    {
+        var props   = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var keys    = props.Select(p => PascalToSnakeCase(p.Name)).ToArray();
+        var headers = keys.Select(FormatHeader).ToArray();
+        var rows    = items.Select(item =>
+            props.Select(p => p.GetValue(item)?.ToString() ?? "").ToArray()
+        ).ToArray();
+
+        return new Table(title, keys, headers, rows);
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    private static (string[] keys, string[] headers, string[][] rows) ParseJson(string json)
+    {
         var docs = JsonSerializer.Deserialize<JsonElement[]>(json)
             ?? throw new ArgumentException("Invalid JSON array.", nameof(json));
         if (docs.Length == 0)
             throw new ArgumentException("JSON array must not be empty.", nameof(json));
 
-        _columnKeys    = docs[0].EnumerateObject().Select(p => p.Name).ToArray();
-        _columnHeaders = _columnKeys.Select(FormatHeader).ToArray();
-        _rows          = docs.Select(doc =>
-            _columnKeys.Select(k => doc.TryGetProperty(k, out var v) ? v.GetString() ?? "" : "")
-                       .ToArray()
+        var keys    = docs[0].EnumerateObject().Select(p => p.Name).ToArray();
+        var headers = keys.Select(FormatHeader).ToArray();
+        var rows    = docs.Select(doc =>
+            keys.Select(k => doc.TryGetProperty(k, out var v) ? v.GetString() ?? "" : "").ToArray()
         ).ToArray();
+
+        return (keys, headers, rows);
     }
 
-    // "transaction_id" -> "Transaction Id"
+    private Table(string title, (string[] keys, string[] headers, string[][] rows) d)
+        : this(title, d.keys, d.headers, d.rows) { }
+
+    // "transaction_id" → "Transaction Id"
     private static string FormatHeader(string key) =>
         string.Join(" ", key.Split('_')
             .Select(w => w.Length > 0 ? char.ToUpper(w[0]) + w[1..] : w));
+
+    // "TransactionId" → "transaction_id"
+    private static string PascalToSnakeCase(string name)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < name.Length; i++)
+        {
+            if (i > 0 && char.IsUpper(name[i]))
+                sb.Append('_');
+            sb.Append(char.ToLower(name[i]));
+        }
+        return sb.ToString();
+    }
 
     public void Draw(SKCanvas canvas, int width, int height)
     {
@@ -115,8 +159,7 @@ public class Table
         const float btnW = 108f, btnH = 32f;
         float btnX = width - CardM - btnW;
         using var rrBtn = new SKRoundRect(new SKRect(btnX, 36f, btnX + btnW, 36f + btnH), btnH / 2f);
-        canvas.DrawRoundRect(rrBtn, pCardStroke);
-        canvas.DrawText("↗  Export", btnX + 14f, 57f, fSmall, pPrim);
+     
 
         canvas.DrawLine(CardM, 83f, width - CardM, 83f, pDiv);
 
